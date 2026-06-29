@@ -14,8 +14,15 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      # 修复：强行在 Actions 虚拟机中激活 MSVC 命令行开发环境（包括所需的编译器与 SDK 变量）
+      - name: 设置 MSVC 开发人员命令提示
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # 修复：移除导致找不到实例的硬编码 -G 生成器参数，直接让 CMake 走刚才激活的通用命令行编译环境
       - name: 配置 CMake
-        run: cmake -S joycon2_connector -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -S joycon2_connector -B build -A x64
 
       - name: 编译 Release
         run: cmake --build build --config Release
