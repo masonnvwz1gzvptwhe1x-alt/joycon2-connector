@@ -13,6 +13,55 @@ int16_t to_signed_16(uint8_t lsb, uint8_t msb) {
     return static_cast<int16_t>((msb << 8) | lsb);
 }
 
+// ── JoyCon2 报告有效性检测 ────────────────────────────────────────────────────
+// JoyCon2 发来的 HID 报告有多种格式，体感数据只在 buffer[0x29] == 0x01
+// 的"标准输入报告"里位于 0x30~0x3B。其他格式（握手包/配置响应包等）
+// 这段偏移里放的不是体感数据，必须跳过，否则体感会输出噪声或全零。
+namespace {
+
+constexpr size_t  JC2_REPORT_MIN_SIZE      = 0x3C;
+constexpr size_t  JC2_REPORT_MARKER_OFFSET = 0x29;
+constexpr uint8_t JC2_REPORT_MARKER_VALUE  = 0x01;
+
+constexpr size_t JC2_ACCEL_X_OFFSET = 0x30;
+constexpr size_t JC2_ACCEL_Y_OFFSET = 0x32;
+constexpr size_t JC2_ACCEL_Z_OFFSET = 0x34;
+constexpr size_t JC2_GYRO_X_OFFSET  = 0x36;
+constexpr size_t JC2_GYRO_Y_OFFSET  = 0x38;
+constexpr size_t JC2_GYRO_Z_OFFSET  = 0x3A;
+
+// 第一层：检查报告格式标记
+static bool IsValidMotionReport(const std::vector<uint8_t>& buffer)
+{
+    return buffer.size() >= JC2_REPORT_MIN_SIZE &&
+           buffer[JC2_REPORT_MARKER_OFFSET] == JC2_REPORT_MARKER_VALUE;
+}
+
+// 第二层：检查体感字节不全为零（设备未初始化或不支持时全零）
+static bool MotionBytesNonZero(const std::vector<uint8_t>& buffer)
+{
+    for (size_t i = JC2_ACCEL_X_OFFSET; i <= JC2_GYRO_Z_OFFSET + 1; ++i)
+        if (buffer[i] != 0) return true;
+    return false;
+}
+
+// 第三层：通过两重检查后才读取，写入 DS4 报告
+static void ApplyMotionToReport(DS4_REPORT_EX& report, const std::vector<uint8_t>& buffer)
+{
+    if (!IsValidMotionReport(buffer)) return;
+    if (!MotionBytesNonZero(buffer))  return;
+
+    report.Report.wAccelX = to_signed_16(buffer[JC2_ACCEL_X_OFFSET],     buffer[JC2_ACCEL_X_OFFSET + 1]);
+    report.Report.wAccelY = to_signed_16(buffer[JC2_ACCEL_Y_OFFSET],     buffer[JC2_ACCEL_Y_OFFSET + 1]);
+    report.Report.wAccelZ = to_signed_16(buffer[JC2_ACCEL_Z_OFFSET],     buffer[JC2_ACCEL_Z_OFFSET + 1]);
+    report.Report.wGyroX  = to_signed_16(buffer[JC2_GYRO_X_OFFSET],      buffer[JC2_GYRO_X_OFFSET  + 1]);
+    report.Report.wGyroY  = to_signed_16(buffer[JC2_GYRO_Y_OFFSET],      buffer[JC2_GYRO_Y_OFFSET  + 1]);
+    report.Report.wGyroZ  = to_signed_16(buffer[JC2_GYRO_Z_OFFSET],      buffer[JC2_GYRO_Z_OFFSET  + 1]);
+}
+
+} // namespace
+// ─────────────────────────────────────────────────────────────────────────────
+
 constexpr uint32_t BUTTON_A_MASK_RIGHT = 0x000800;
 constexpr uint32_t BUTTON_B_MASK_RIGHT = 0x000200;
 constexpr uint32_t BUTTON_X_MASK_RIGHT = 0x000400;
@@ -174,13 +223,7 @@ DS4_REPORT_EX GenerateDS4Report(const std::vector<uint8_t>& buffer, JoyConSide s
     report.Report.bThumbLX = static_cast<BYTE>((stickX / 32767.0f) * 127 + 128);
     report.Report.bThumbLY = static_cast<BYTE>((stickY / 32767.0f) * 127 + 128);
 
-    report.Report.wAccelX = to_signed_16(buffer[0x30], buffer[0x31]);
-    report.Report.wAccelY = to_signed_16(buffer[0x32], buffer[0x33]);
-    report.Report.wAccelZ = to_signed_16(buffer[0x34], buffer[0x35]);
-
-    report.Report.wGyroX = to_signed_16(buffer[0x36], buffer[0x37]);
-    report.Report.wGyroY = to_signed_16(buffer[0x38], buffer[0x39]);
-    report.Report.wGyroZ = to_signed_16(buffer[0x3A], buffer[0x3B]);
+    ApplyMotionToReport(report, buffer);
 
     return report;
 }
@@ -415,12 +458,7 @@ DS4_REPORT_EX GenerateProControllerReport(const std::vector<uint8_t>& buffer)
     report.Report.bThumbRX = static_cast<uint8_t>((rx / 32767.0f) * 127 + 128);
     report.Report.bThumbRY = static_cast<uint8_t>((ry / 32767.0f) * 127 + 128);
 
-    report.Report.wAccelX = to_signed_16(buffer[0x30], buffer[0x31]);
-    report.Report.wAccelY = to_signed_16(buffer[0x32], buffer[0x33]);
-    report.Report.wAccelZ = to_signed_16(buffer[0x34], buffer[0x35]);
-    report.Report.wGyroX = to_signed_16(buffer[0x36], buffer[0x37]);
-    report.Report.wGyroY = to_signed_16(buffer[0x38], buffer[0x39]);
-    report.Report.wGyroZ = to_signed_16(buffer[0x3A], buffer[0x3B]);
+    ApplyMotionToReport(report, buffer);
 
     return report;
 }
@@ -484,12 +522,7 @@ DS4_REPORT_EX GenerateNSOGCReport(const std::vector<uint8_t>& buffer)
     report.Report.bThumbRX = static_cast<uint8_t>((rx / 32767.0f) * 127 + 128);
     report.Report.bThumbRY = static_cast<uint8_t>((ry / 32767.0f) * 127 + 128);
 
-    report.Report.wAccelX = to_signed_16(buffer[0x30], buffer[0x31]);
-    report.Report.wAccelY = to_signed_16(buffer[0x32], buffer[0x33]);
-    report.Report.wAccelZ = to_signed_16(buffer[0x34], buffer[0x35]);
-    report.Report.wGyroX = to_signed_16(buffer[0x36], buffer[0x37]);
-    report.Report.wGyroY = to_signed_16(buffer[0x38], buffer[0x39]);
-    report.Report.wGyroZ = to_signed_16(buffer[0x3A], buffer[0x3B]);
+    ApplyMotionToReport(report, buffer);
 
     return report;
 }
@@ -510,6 +543,8 @@ std::pair<int16_t, int16_t> GetRawOpticalMouse(const std::vector<uint8_t>& buffe
 MotionData DecodeMotion(const std::vector<uint8_t>& buffer) {
     MotionData m{};
     if (buffer.size() < 0x3C) return m;
+    if (!IsValidMotionReport(buffer)) return m;
+    if (!MotionBytesNonZero(buffer))  return m;
     m.accelX = to_signed_16(buffer[0x30], buffer[0x31]);
     m.accelY = to_signed_16(buffer[0x32], buffer[0x33]);
     m.accelZ = to_signed_16(buffer[0x34], buffer[0x35]);
