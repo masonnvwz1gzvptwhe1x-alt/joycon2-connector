@@ -39,6 +39,7 @@ include_directories(
 set(APP_SOURCES
   src/App.cpp
   src/JoyConDecoder.cpp
+  src/DsuServer.cpp
 )
 
 # Resource file (DPI manifest)
@@ -70,6 +71,7 @@ target_link_libraries(joycon2_connector
         dxgi
         d3dcompiler
         dwmapi
+        ws2_32
 )
 
 if(MSVC)
