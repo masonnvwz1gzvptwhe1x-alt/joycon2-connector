@@ -5,6 +5,7 @@
 #include "BLECommands.h"
 #include "ConfigManager.h"
 #include "JoyConDecoder.h"
+#include "DsuServer.h"
 #include <vector>
 #include <memory>
 #include <thread>
@@ -330,6 +331,7 @@ struct PlayerConfig {
     JoyConSide joyconSide = JoyConSide::Left;
     JoyConOrientation joyconOrientation = JoyConOrientation::Upright;
     GyroSource gyroSource = GyroSource::Both;
+    GyroMode gyroMode = GyroMode::Raw;
 };
 
 struct SingleJoyConPlayer {
@@ -341,6 +343,9 @@ struct SingleJoyConPlayer {
     bool swapABXY = false;
     bool isXboxMode = false;
     uint64_t bleAddress = 0;
+    // DSU/UDP motion forwarding
+    GyroMode gyroMode = GyroMode::Raw;
+    uint8_t dsuSlot = 0;
     // Mouse State
     int mouseMode = 0;
     bool wasChatPressed = false;
@@ -386,7 +391,8 @@ struct SingleJoyConPlayer {
           lastBLETimestamp(o.lastBLETimestamp),
           reportIntervalMs(o.reportIntervalMs.load()),
           bleTimestampInitialized(o.bleTimestampInitialized),
-          isXboxMode(o.isXboxMode) {}
+          isXboxMode(o.isXboxMode),
+          gyroMode(o.gyroMode), dsuSlot(o.dsuSlot) {}
     SingleJoyConPlayer& operator=(SingleJoyConPlayer&& o) noexcept {
         if (this != &o) {
             joycon = std::move(o.joycon); ds4Controller = o.ds4Controller;
@@ -404,6 +410,7 @@ struct SingleJoyConPlayer {
             reportIntervalMs.store(o.reportIntervalMs.load());
             bleTimestampInitialized = o.bleTimestampInitialized;
             isXboxMode = o.isXboxMode;
+            gyroMode = o.gyroMode; dsuSlot = o.dsuSlot;
         }
         return *this;
     }
@@ -420,6 +427,9 @@ struct DualJoyConPlayer {
     bool swapABXY = false;
     bool isXboxMode = false;
     uint64_t bleAddress = 0;  // uses right JoyCon's BLE address
+    // DSU/UDP motion forwarding
+    GyroMode gyroMode = GyroMode::Raw;
+    uint8_t dsuSlot = 0;
     std::atomic<bool> running{ false };
     std::thread updateThread;
     std::atomic<std::shared_ptr<std::vector<uint8_t>>> leftBufferAtomic{ std::make_shared<std::vector<uint8_t>>() };
@@ -439,6 +449,9 @@ struct ProControllerPlayer {
     std::shared_ptr<std::atomic<bool>> useRawVibrationFlag = std::make_shared<std::atomic<bool>>(true);
     std::shared_ptr<std::atomic<bool>> isXboxModeFlag = std::make_shared<std::atomic<bool>>(false);
     uint64_t bleAddress = 0;
+    // DSU/UDP motion forwarding
+    std::shared_ptr<std::atomic<bool>> useDsuFlag = std::make_shared<std::atomic<bool>>(false);
+    uint8_t dsuSlot = 0;
 };
 
 // Button mapping application
@@ -581,6 +594,27 @@ inline void HandleSpecialProButtons(const std::vector<uint8_t>& buffer) {
         }
     }
     g_cButtonPressed = cPressed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// DSU/UDP 体感转发服务器
+//
+// 用于配合 Cemu / Yuzu / Ryujinx 等模拟器读取体感数据（通过 cemuhook 协议）。
+// 启动后监听 UDP 26760 端口，模拟器作为客户端连接进来订阅指定槽位。
+// 每个 player 在生成 DS4_REPORT_EX 之后，如果设置了 GyroMode::DsuUdp，
+// 就把这一帧报告转发给对应槽位。
+// ─────────────────────────────────────────────────────────────────────────
+inline DsuServer& GetDsuServer() {
+    static DsuServer server;
+    return server;
+}
+
+// 简单的槽位分配器：槽位范围 0-3（DsuServer 内部固定 4 个槽位）
+inline uint8_t AllocateDsuSlot() {
+    static std::atomic<uint8_t> nextSlot{ 0 };
+    uint8_t slot = nextSlot.fetch_add(1) % 4;
+    GetDsuServer().SetControllerConnected(slot, true);
+    return slot;
 }
 
 class PlayerManager {
@@ -814,6 +848,9 @@ public:
                 DS4_REPORT_EX report = GenerateDS4Report(buffer, joyconSide, joyconOrientation);
                 if (playerPtr->swapABXY) ApplyABXYSwap(report);
                 vigem_target_ds4_update_ex(ViGEmManager::Instance().GetClient(), playerPtr->ds4Controller, report);
+                if (playerPtr->gyroMode == GyroMode::DsuUdp) {
+                    GetDsuServer().UpdateController(playerPtr->dsuSlot, report);
+                }
             }
         });
 
@@ -938,6 +975,9 @@ public:
                     DS4_REPORT_EX report = GenerateDualJoyConDS4Report(*leftBuf, *rightBuf, ptr->gyroSource);
                     if (ptr->swapABXY) ApplyABXYSwap(report);
                     vigem_target_ds4_update_ex(ViGEmManager::Instance().GetClient(), ptr->ds4Controller, report);
+                    if (ptr->gyroMode == GyroMode::DsuUdp) {
+                        GetDsuServer().UpdateController(ptr->dsuSlot, report);
+                    }
                 }
             }
         });
@@ -966,6 +1006,8 @@ public:
         auto rawVibFlag = std::make_shared<std::atomic<bool>>(
             ConfigManager::Instance().GetDeviceSettings(controller.bleAddress).useRawVibration);
         auto xboxModeFlag = std::make_shared<std::atomic<bool>>(xboxMode);
+        auto dsuFlag = std::make_shared<std::atomic<bool>>(false);
+        uint8_t dsuSlot = 0;
 
         if (type == ControllerType::ProController) {
             if (xboxMode) {
@@ -982,7 +1024,7 @@ public:
                     vigem_target_x360_update(ViGEmManager::Instance().GetClient(), target, xreport);
                 });
             } else {
-                controller.inputChar.ValueChanged([target, swapFlag](GattCharacteristic const&, GattValueChangedEventArgs const& args) mutable {
+                controller.inputChar.ValueChanged([target, swapFlag, dsuFlag, dsuSlot](GattCharacteristic const&, GattValueChangedEventArgs const& args) mutable {
                     thread_local bool prioritySet = false;
                     if (!prioritySet) { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL); prioritySet = true; }
                     auto reader = DataReader::FromBuffer(args.CharacteristicValue());
@@ -993,6 +1035,9 @@ public:
                     if (swapFlag->load(std::memory_order_relaxed)) ApplyABXYSwap(report);
                     HandleSpecialProButtons(buffer);
                     vigem_target_ds4_update_ex(ViGEmManager::Instance().GetClient(), target, report);
+                    if (dsuFlag->load(std::memory_order_relaxed)) {
+                        GetDsuServer().UpdateController(dsuSlot, report);
+                    }
                 });
             }
         } else {
@@ -1008,7 +1053,7 @@ public:
                     vigem_target_x360_update(ViGEmManager::Instance().GetClient(), target, xreport);
                 });
             } else {
-                controller.inputChar.ValueChanged([target, swapFlag](GattCharacteristic const&, GattValueChangedEventArgs const& args) mutable {
+                controller.inputChar.ValueChanged([target, swapFlag, dsuFlag, dsuSlot](GattCharacteristic const&, GattValueChangedEventArgs const& args) mutable {
                     thread_local bool prioritySet = false;
                     if (!prioritySet) { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL); prioritySet = true; }
                     auto reader = DataReader::FromBuffer(args.CharacteristicValue());
@@ -1017,6 +1062,9 @@ public:
                     DS4_REPORT_EX report = GenerateNSOGCReport(buffer);
                     if (swapFlag->load(std::memory_order_relaxed)) ApplyABXYSwap(report);
                     vigem_target_ds4_update_ex(ViGEmManager::Instance().GetClient(), target, report);
+                    if (dsuFlag->load(std::memory_order_relaxed)) {
+                        GetDsuServer().UpdateController(dsuSlot, report);
+                    }
                 });
             }
         }
@@ -1035,7 +1083,7 @@ public:
             EmitSound(controller.writeChar);
         }
 
-        proPlayers.push_back({ controller, target, type, nullptr, swapFlag, rawVibFlag, xboxModeFlag, controller.bleAddress });
+        proPlayers.push_back({ controller, target, type, nullptr, swapFlag, rawVibFlag, xboxModeFlag, controller.bleAddress, dsuFlag, dsuSlot });
 
         // Register vibration callback for pro/GC controller
         auto& pp = proPlayers.back();
