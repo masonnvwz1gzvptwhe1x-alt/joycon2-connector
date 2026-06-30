@@ -472,6 +472,28 @@ inline void RenderDashboard() {
                     }
                 }
                 ImGui::TextColored(UITheme::TextTertiary, "%s", T("dash_xbox_emulation_hint"));
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // DSU/UDP motion forwarding toggle (for emulators via cemuhook protocol)
+                bool dsuOn = (p.gyroMode == GyroMode::DsuUdp);
+                if (ImGui::Checkbox("DSU/UDP Motion Forwarding", &dsuOn)) {
+                    if (dsuOn) {
+                        p.gyroMode = GyroMode::DsuUdp;
+                        p.dsuSlot = AllocateDsuSlot();
+                        GetDsuServer().Start(26760);
+                    } else {
+                        p.gyroMode = GyroMode::Raw;
+                        GetDsuServer().SetControllerConnected(p.dsuSlot, false);
+                    }
+                    ConfigManager::Instance().Save();
+                }
+                ImGui::TextColored(UITheme::TextTertiary, "%s", "Forward motion data to emulators via cemuhook protocol (UDP)");
+                if (dsuOn) {
+                    ImGui::TextColored(UITheme::TextTertiary, "  UDP 127.0.0.1:26760  |  slot %d", p.dsuSlot);
+                }
                 ImGui::EndPopup();
             }
             ImGui::PopStyleVar(2);
@@ -550,6 +572,28 @@ inline void RenderDashboard() {
                     }
                 }
                 ImGui::TextColored(UITheme::TextTertiary, "%s", T("dash_xbox_emulation_hint"));
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // DSU/UDP motion forwarding toggle (for emulators via cemuhook protocol)
+                bool dsuOnDual = (p->gyroMode == GyroMode::DsuUdp);
+                if (ImGui::Checkbox("DSU/UDP Motion Forwarding", &dsuOnDual)) {
+                    if (dsuOnDual) {
+                        p->gyroMode = GyroMode::DsuUdp;
+                        p->dsuSlot = AllocateDsuSlot();
+                        GetDsuServer().Start(26760);
+                    } else {
+                        p->gyroMode = GyroMode::Raw;
+                        GetDsuServer().SetControllerConnected(p->dsuSlot, false);
+                    }
+                    ConfigManager::Instance().Save();
+                }
+                ImGui::TextColored(UITheme::TextTertiary, "%s", "Forward motion data to emulators via cemuhook protocol (UDP)");
+                if (dsuOnDual) {
+                    ImGui::TextColored(UITheme::TextTertiary, "  UDP 127.0.0.1:26760  |  slot %d", p->dsuSlot);
+                }
                 ImGui::EndPopup();
             }
             ImGui::PopStyleVar(2);
@@ -652,6 +696,28 @@ inline void RenderDashboard() {
                     }
                 }
                 ImGui::TextColored(UITheme::TextTertiary, "%s", T("dash_xbox_emulation_hint"));
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // DSU/UDP motion forwarding toggle (for emulators via cemuhook protocol)
+                bool dsuOnPro = p.useDsuFlag->load(std::memory_order_relaxed);
+                if (ImGui::Checkbox("DSU/UDP Motion Forwarding", &dsuOnPro)) {
+                    if (dsuOnPro) {
+                        p.dsuSlot = AllocateDsuSlot();
+                        GetDsuServer().Start(26760);
+                        p.useDsuFlag->store(true, std::memory_order_relaxed);
+                    } else {
+                        p.useDsuFlag->store(false, std::memory_order_relaxed);
+                        GetDsuServer().SetControllerConnected(p.dsuSlot, false);
+                    }
+                    ConfigManager::Instance().Save();
+                }
+                ImGui::TextColored(UITheme::TextTertiary, "%s", "Forward motion data to emulators via cemuhook protocol (UDP)");
+                if (dsuOnPro) {
+                    ImGui::TextColored(UITheme::TextTertiary, "  UDP 127.0.0.1:26760  |  slot %d", p.dsuSlot);
+                }
 
                 ImGui::EndPopup();
             }
