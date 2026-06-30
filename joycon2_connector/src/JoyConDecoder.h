@@ -8,6 +8,7 @@
 enum class JoyConSide { Left, Right };
 enum class JoyConOrientation { Upright, Sideways };
 enum class GyroSource { Both, Left, Right };
+enum class GyroMode { Raw, DsuUdp };
 
 struct StickData {
     int16_t x;
