@@ -27,7 +27,7 @@ jobs:
         run: cmake -S joycon2_connector -B build -A x64
 
       - name: 编译 Release
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --verbose
 
       - name: 打包 exe
         run: |
