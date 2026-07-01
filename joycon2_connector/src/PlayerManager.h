@@ -19,17 +19,16 @@
 // JoyCon2 / Pro2 / NSO GC "官方初始化命令序列"
 //
 // 这些命令是从父项目 (TheFrano/joycon2cpp) 的 testapp.cpp 移植过来的。
-// 父版本通过 rumbleChar（振动特征值）下发这套命令；但本分支版本的
-// ConnectedJoyCon 结构体（DeviceManager.h）从未声明、扫描、保存
-// rumbleChar 这个 GATT 特征值 —— 分支版本的振动功能已经统一改走
-// writeChar 通道。为了不引入分支架构里不存在的新通道，这里改成通过
-// writeChar 发送同一套命令序列（这套命令本身只是子命令数据包，
-// 走哪个已建立连接的写入特征值在协议层面是等价的）。
+// 命令必须通过 rumbleChar（振动特征值）下发，不能走 writeChar——
+// 经实测验证，writeChar 路径无法唤醒控制器固件的 IMU 状态机。
 //
-// 这套序列里包含启用 IMU（加速度计/陀螺仪）上报的子命令。分支版本
-// 原先只调用了 SendCustomCommands（两条精简命令），完全没有发送这套
-// 初始化序列 —— 这是体感数据从未被控制器写入输入报告的根本原因，
-// 不是数据解析偏移的问题。
+// 对应的四个 rumble UUID（来自父版本 testapp.cpp 第 61-64 行）：
+//   Left JoyCon:  ce49a830-dced-48ae-931e-c8cf88aadbea
+//   Right JoyCon: 65a724b3-f1e7-4a61-8078-a342376b27ff
+//   Pro Controller: 3dacbc7e-6955-40b5-8eaf-6f9809e8b379
+//   NSO GC:       af95885e-44b3-4a24-9cf0-483cc129469a
+// 这四个 UUID 已经加入 DeviceManager.h 的 GATT 扫描逻辑，
+// 扫描到后存入 ConnectedJoyCon::rumbleChar 字段。
 // ─────────────────────────────────────────────────────────────────────────
 
 inline void Send0016Command(GattCharacteristic const& ch, const std::vector<uint8_t>& cmd,
@@ -859,7 +858,7 @@ public:
 
         if (player.joycon.writeChar) {
             SendCustomCommands(player.joycon.writeChar);
-            SendJoyCon2OfficialInit(player.joycon.writeChar);  // 启用 IMU 上报，修复体感失效
+            SendJoyCon2OfficialInit(player.joycon.rumbleChar);  // 启用 IMU 上报：必须走 rumbleChar，writeChar 无法唤醒 IMU
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(player.joycon.writeChar, static_cast<uint8_t>(1 << (GetPlayerCount() - 1)));
             EmitSound(player.joycon.writeChar);
@@ -883,7 +882,7 @@ public:
         pendingDualGyro = gyroSource;
         if (rightJoyCon.writeChar) {
             SendCustomCommands(rightJoyCon.writeChar);
-            SendJoyCon2OfficialInit(rightJoyCon.writeChar);  // 启用 IMU 上报，修复体感失效
+            SendJoyCon2OfficialInit(rightJoyCon.rumbleChar);  // 启用 IMU 上报：必须走 rumbleChar
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(rightJoyCon.writeChar, 0x01);
             EmitSound(rightJoyCon.writeChar);
@@ -894,7 +893,7 @@ public:
     bool AddDualJoyConSecondStep(ConnectedJoyCon leftJoyCon) {
         if (leftJoyCon.writeChar) {
             SendCustomCommands(leftJoyCon.writeChar);
-            SendJoyCon2OfficialInit(leftJoyCon.writeChar);  // 启用 IMU 上报，修复体感失效
+            SendJoyCon2OfficialInit(leftJoyCon.rumbleChar);  // 启用 IMU 上报：必须走 rumbleChar
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(leftJoyCon.writeChar, 0x08);
             EmitSound(leftJoyCon.writeChar);
@@ -1075,9 +1074,9 @@ public:
         if (controller.writeChar) {
             SendCustomCommands(controller.writeChar);
             if (type == ControllerType::ProController)
-                SendProCon2OfficialInit(controller.writeChar);   // 启用 IMU 上报，修复体感失效
+                SendProCon2OfficialInit(controller.rumbleChar);   // 启用 IMU 上报：必须走 rumbleChar
             else
-                SendNSOGCOfficialInit(controller.writeChar);     // 启用 IMU 上报，修复体感失效
+                SendNSOGCOfficialInit(controller.rumbleChar);     // 启用 IMU 上报：必须走 rumbleChar
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(controller.writeChar, static_cast<uint8_t>(1 << (GetPlayerCount())));
             EmitSound(controller.writeChar);
