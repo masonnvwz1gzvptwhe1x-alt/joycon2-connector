@@ -39,7 +39,6 @@ include_directories(
 set(APP_SOURCES
   src/App.cpp
   src/JoyConDecoder.cpp
-  src/DsuServer.cpp
 )
 
 # Resource file (DPI manifest)
@@ -60,6 +59,19 @@ set(IMGUI_SOURCES
 add_executable(joycon2_connector WIN32 ${APP_SOURCES} ${IMGUI_SOURCES} ${RC_SOURCES})
 add_dependencies(joycon2_connector generate_lang_data)
 
+# NOTE: CMake's Visual Studio generator enables Whole Program Optimization
+# (/GL) + LTCG for Release/MinSizeRel by default, even though it's never
+# requested anywhere in this file. On the free GitHub Actions Windows
+# runner (~7GB RAM) the LTCG "Generating Code..." backend pass for this
+# project (large inline headers like PlayerManager.h duplicated across
+# many translation units) runs out of memory and gets killed with no
+# diagnostic — that's the silent "exit code 1" right after
+# "Generating Code...". Explicitly disabling it here avoids that crash.
+set_target_properties(joycon2_connector PROPERTIES
+  INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF
+  INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL OFF
+)
+
 target_link_directories(joycon2_connector PRIVATE ${CMAKE_SOURCE_DIR}/lib)
 target_link_libraries(joycon2_connector
     PRIVATE
@@ -71,13 +83,12 @@ target_link_libraries(joycon2_connector
         dxgi
         d3dcompiler
         dwmapi
-        ws2_32
 )
 
 if(MSVC)
-  target_compile_options(joycon2_connector PRIVATE /W3 /permissive- /utf-8)
+  target_compile_options(joycon2_connector PRIVATE /W3 /permissive- /utf-8 /GL-)
   # Disable auto-generated manifest — we embed our own via app.rc
-  target_link_options(joycon2_connector PRIVATE /MANIFEST:NO)
+  target_link_options(joycon2_connector PRIVATE /MANIFEST:NO /LTCG:OFF)
 else()
   target_compile_options(joycon2_connector PRIVATE -Wall -Wextra -pedantic)
 endif()
