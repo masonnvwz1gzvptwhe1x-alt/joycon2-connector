@@ -26,10 +26,10 @@ jobs:
       - name: 配置 CMake
         run: cmake -S joycon2_connector -B build -A x64
 
-      - name: 解除 lib 目录只读属性（含 .pdb 文件）
+      - name: 解除 lib 目录只读属性并删除 ViGEmClient.pdb
         run: |
           attrib -R "joycon2_connector\lib\*.*" /S /D
-          if exist "joycon2_connector\lib\ViGEmClient.pdb" attrib -R "joycon2_connector\lib\ViGEmClient.pdb"
+          if exist "joycon2_connector\lib\ViGEmClient.pdb" del /F /Q "joycon2_connector\lib\ViGEmClient.pdb"
         shell: cmd
 
       - name: 编译 Release
