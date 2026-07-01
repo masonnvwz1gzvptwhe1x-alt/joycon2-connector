@@ -89,7 +89,12 @@ target_link_libraries(joycon2_connector
 if(MSVC)
   target_compile_options(joycon2_connector PRIVATE /W3 /permissive- /utf-8 /GL-)
   # Disable auto-generated manifest — we embed our own via app.rc
-  target_link_options(joycon2_connector PRIVATE /MANIFEST:NO /LTCG:OFF)
+  target_link_options(joycon2_connector PRIVATE /MANIFEST:NO /LTCG:OFF /DEBUG:NONE)
+  # NOTE: /DEBUG:NONE — Release doesn't need debug symbols shipped to users,
+  # and without it the linker tries to merge type info from the prebuilt
+  # third-party lib/ViGEmClient.pdb, which fails with C1090 (PDB API call
+  # failed, error 5 / ACCESS_DENIED) on the CI runner's checked-out copy.
+  # Skipping debug-info generation entirely avoids touching that file.
 else()
   target_compile_options(joycon2_connector PRIVATE -Wall -Wextra -pedantic)
 endif()
