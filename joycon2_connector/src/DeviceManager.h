@@ -12,12 +12,18 @@
 #include <functional>
 #include <thread>
 
-using namespace winrt;
-using namespace Windows::Devices::Bluetooth;
-using namespace Windows::Devices::Bluetooth::Advertisement;
-using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
-using namespace Windows::Storage::Streams;
-using namespace Windows::Foundation;
+// NOTE: do NOT write "using namespace winrt;" here — this is a header
+// included by many translation units, and it unqualified-injects
+// winrt::IUnknown into the global namespace. Any later-included Windows
+// SDK header that declares the classic COM ::IUnknown (e.g. ShlObj.h ->
+// shobjidl_core.h, pulled in by Logger.h) then fails with
+// C2872 'IUnknown': ambiguous symbol. Qualify with winrt:: instead.
+using namespace winrt::Windows::Devices::Bluetooth;
+using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
+using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
+using namespace winrt::Windows::Storage::Streams;
+using namespace winrt::Windows::Foundation;
+using winrt::guid;  // single-name using-declaration only — safe, doesn't drag in winrt::IUnknown
 
 constexpr uint16_t JOYCON_MANUFACTURER_ID = 1363;
 inline const std::vector<uint8_t> JOYCON_MANUFACTURER_PREFIX = { 0x01, 0x00, 0x03, 0x7E };
