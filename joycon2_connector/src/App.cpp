@@ -541,7 +541,7 @@ void RenderSidebar() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,   UITheme::SurfaceDim);
     ImGui::PushStyleColor(ImGuiCol_Text,           UITheme::TextSecondary);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(8), S(3)));
-    if (ImGui::SmallButton("日志")) {
+    if (ImGui::SmallButton(T("sidebar_log_button"))) {
         g_showLogWindow = !g_showLogWindow;
     }
     ImGui::PopStyleVar();
