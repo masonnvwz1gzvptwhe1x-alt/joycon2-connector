@@ -12,17 +12,19 @@
 #include <functional>
 #include <thread>
 
-// NOTE: do NOT write "using namespace winrt;" here — this is a header
-// included by many translation units, and it unqualified-injects
-// winrt::IUnknown into the global namespace. Any later-included Windows
-// SDK header that declares the classic COM ::IUnknown (e.g. ShlObj.h ->
-// shobjidl_core.h, pulled in by Logger.h) then fails with
-// C2872 'IUnknown': ambiguous symbol. Qualify with winrt:: instead.
+// NOTE: do NOT write "using namespace winrt;" or "using namespace
+// winrt::Windows::Foundation;" here — this is a header included by many
+// translation units, and both of those unqualified-inject an IUnknown
+// symbol into the global namespace (winrt::IUnknown / 
+// winrt::Windows::Foundation::IUnknown respectively). Any later-included
+// Windows SDK header that declares the classic COM ::IUnknown (e.g.
+// ShlObj.h -> shobjidl_core.h, pulled in by Logger.h) then fails with
+// C2872 'IUnknown': ambiguous symbol. Nothing in this codebase actually
+// needs unqualified Windows::Foundation types, so it's safely omitted.
 using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
 using namespace winrt::Windows::Storage::Streams;
-using namespace winrt::Windows::Foundation;
 using winrt::guid;  // single-name using-declaration only — safe, doesn't drag in winrt::IUnknown
 
 constexpr uint16_t JOYCON_MANUFACTURER_ID = 1363;
