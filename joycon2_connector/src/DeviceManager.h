@@ -21,13 +21,20 @@ using namespace Windows::Foundation;
 
 constexpr uint16_t JOYCON_MANUFACTURER_ID = 1363;
 inline const std::vector<uint8_t> JOYCON_MANUFACTURER_PREFIX = { 0x01, 0x00, 0x03, 0x7E };
-inline const wchar_t* INPUT_REPORT_UUID_STR = L"ab7de9be-89fe-49ad-828f-118f09df7fd2";
+inline const wchar_t* INPUT_REPORT_UUID_STR  = L"ab7de9be-89fe-49ad-828f-118f09df7fd2";
 inline const wchar_t* WRITE_COMMAND_UUID_STR = L"649d4ac9-8eb7-4e6c-af44-1ea54fe5f005";
+// Rumble/init characteristic UUIDs — required for SendJoyCon2OfficialInit
+// These must receive the 17-command IMU init sequence (not writeChar)
+inline const wchar_t* RUMBLE_CHAR_UUID_L   = L"ce49a830-dced-48ae-931e-c8cf88aadbea";
+inline const wchar_t* RUMBLE_CHAR_UUID_R   = L"65a724b3-f1e7-4a61-8078-a342376b27ff";
+inline const wchar_t* RUMBLE_CHAR_UUID_PRO = L"3dacbc7e-6955-40b5-8eaf-6f9809e8b379";
+inline const wchar_t* RUMBLE_CHAR_UUID_GC  = L"af95885e-44b3-4a24-9cf0-483cc129469a";
 
 struct ConnectedJoyCon {
     BluetoothLEDevice device = nullptr;
-    GattCharacteristic inputChar = nullptr;
-    GattCharacteristic writeChar = nullptr;
+    GattCharacteristic inputChar  = nullptr;
+    GattCharacteristic writeChar  = nullptr;
+    GattCharacteristic rumbleChar = nullptr;  // for IMU init sequence
     uint64_t bleAddress = 0;
 };
 
@@ -179,6 +186,11 @@ private:
                     cj.inputChar = characteristic;
                 else if (characteristic.Uuid() == guid(WRITE_COMMAND_UUID_STR))
                     cj.writeChar = characteristic;
+                else if (characteristic.Uuid() == guid(RUMBLE_CHAR_UUID_L)  ||
+                         characteristic.Uuid() == guid(RUMBLE_CHAR_UUID_R)  ||
+                         characteristic.Uuid() == guid(RUMBLE_CHAR_UUID_PRO)||
+                         characteristic.Uuid() == guid(RUMBLE_CHAR_UUID_GC))
+                    cj.rumbleChar = characteristic;
             }
         }
 
