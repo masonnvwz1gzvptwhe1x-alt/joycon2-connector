@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     
     # 修复：显式声明此工作流拥有向你的仓库写入、创建 Release 内容的权限，解决 Resource not accessible 报错
     permissions:
@@ -26,10 +26,8 @@ jobs:
       - name: 配置 CMake
         run: cmake -S joycon2_connector -B build -A x64
 
-      - name: 解除 lib 目录只读属性并删除 ViGEmClient.pdb
-        run: |
-          attrib -R "joycon2_connector\lib\*.*" /S /D
-          if exist "joycon2_connector\lib\ViGEmClient.pdb" del /F /Q "joycon2_connector\lib\ViGEmClient.pdb"
+      - name: 解除 lib 目录只读属性
+        run: attrib -R "joycon2_connector\lib\*.*" /S /D
         shell: cmd
 
       - name: 编译 Release
