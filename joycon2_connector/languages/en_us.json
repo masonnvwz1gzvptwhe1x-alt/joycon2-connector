@@ -33,6 +33,8 @@
     "dash_raw_vibration_hint": "Disable if vibration feels wrong; enable if controller beeps during rumble",
     "dash_xbox_emulation": "Map as Xbox controller",
     "dash_xbox_emulation_hint": "Gyro and touchpad will be disabled",
+    "dash_dsu_motion": "DSU/UDP Motion Forwarding",
+    "dash_dsu_motion_hint": "Forward motion data to emulators via cemuhook protocol (UDP port 26760)",
     "dash_xbox_warning_title": "Notice",
     "dash_xbox_warning_msg": "Mapping as Xbox controller will disable gyro functionality. Settings will only take effect after manually disconnecting and reconnecting the controller. Continue?",
     "dash_xbox_warning_suppress": "Don't show again",
@@ -116,5 +118,7 @@
     "tray_show": "Show Main Window",
     "tray_no_device": "No controllers connected",
     "tray_disconnect": "Disconnect",
-    "tray_exit": "Exit"
+    "tray_exit": "Exit",
+
+    "sidebar_log_button": "Log"
 }
