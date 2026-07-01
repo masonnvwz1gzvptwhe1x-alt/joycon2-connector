@@ -20,7 +20,8 @@
 enum class LogLevel {
     INFO,   // 常规状态信息（连接、断开、初始化等）
     WARN,   // 警告（特征值缺失、重试等）
-    ERROR,  // 错误（连接失败、命令发送失败等）
+    ERR,    // 错误（连接失败、命令发送失败等）— 注意：不能叫 ERROR，
+            // <Windows.h>(wingdi.h) 会把 ERROR 宏替换成 0，导致编译错误
     DEBUG,  // 调试细节（GATT UUID、命令字节、报告包头等）
     MOTION, // 体感数据采样（高频，默认折叠）
 };
@@ -69,7 +70,7 @@ public:
     // 快捷宏风格的函数
     void Info  (const char* cat, const char* fmt, ...) { va_list a; va_start(a,fmt); LogV(LogLevel::INFO,   cat,fmt,a); va_end(a); }
     void Warn  (const char* cat, const char* fmt, ...) { va_list a; va_start(a,fmt); LogV(LogLevel::WARN,   cat,fmt,a); va_end(a); }
-    void Error (const char* cat, const char* fmt, ...) { va_list a; va_start(a,fmt); LogV(LogLevel::ERROR,  cat,fmt,a); va_end(a); }
+    void Error (const char* cat, const char* fmt, ...) { va_list a; va_start(a,fmt); LogV(LogLevel::ERR,  cat,fmt,a); va_end(a); }
     void Debug (const char* cat, const char* fmt, ...) { va_list a; va_start(a,fmt); LogV(LogLevel::DEBUG,  cat,fmt,a); va_end(a); }
     void Motion(const char* cat, const char* fmt, ...) { va_list a; va_start(a,fmt); LogV(LogLevel::MOTION, cat,fmt,a); va_end(a); }
 
@@ -231,7 +232,7 @@ private:
         switch (e.level) {
             case LogLevel::INFO:   if (!showInfo_)   return false; break;
             case LogLevel::WARN:   if (!showWarn_)   return false; break;
-            case LogLevel::ERROR:  if (!showError_)  return false; break;
+            case LogLevel::ERR:  if (!showError_)  return false; break;
             case LogLevel::DEBUG:  if (!showDebug_)  return false; break;
             case LogLevel::MOTION: if (!showMotion_) return false; break;
         }
@@ -247,7 +248,7 @@ private:
         switch (l) {
             case LogLevel::INFO:   return UITheme::TextSecondary;
             case LogLevel::WARN:   return UITheme::Warning;
-            case LogLevel::ERROR:  return UITheme::Error;
+            case LogLevel::ERR:  return UITheme::Error;
             case LogLevel::DEBUG:  return UITheme::TextTertiary;
             case LogLevel::MOTION: return UITheme::PrimaryHover;
         }
@@ -258,7 +259,7 @@ private:
         switch (l) {
             case LogLevel::INFO:   return "INFO ";
             case LogLevel::WARN:   return "WARN ";
-            case LogLevel::ERROR:  return "ERROR";
+            case LogLevel::ERR:  return "ERROR";
             case LogLevel::DEBUG:  return "DEBUG";
             case LogLevel::MOTION: return "MOTN ";
         }
