@@ -6,6 +6,7 @@
 #include "ConfigManager.h"
 #include "JoyConDecoder.h"
 #include "DsuServer.h"
+#include "Logger.h"
 #include <vector>
 #include <memory>
 #include <thread>
@@ -850,6 +851,11 @@ public:
                 if (playerPtr->gyroMode == GyroMode::DsuUdp) {
                     GetDsuServer().UpdateController(playerPtr->dsuSlot, report);
                 }
+                // 体感采样日志（MOTION 级别，默认折叠，开启后每帧记录）
+                LOG_MOTION("IMU", "accel(%d,%d,%d) gyro(%d,%d,%d) buf[0x29]=0x%02X buflen=%zu",
+                    report.Report.wAccelX, report.Report.wAccelY, report.Report.wAccelZ,
+                    report.Report.wGyroX, report.Report.wGyroY, report.Report.wGyroZ,
+                    buffer.size() > 0x29 ? buffer[0x29] : 0xFF, buffer.size());
             }
         });
 
@@ -857,8 +863,21 @@ public:
             GattClientCharacteristicConfigurationDescriptorValue::Notify).get();
 
         if (player.joycon.writeChar) {
+            LOG_INFO("BLE", "单 JoyCon 已连接，BLE 地址: %llX，writeChar: OK，rumbleChar: %s",
+                player.joycon.bleAddress,
+                player.joycon.rumbleChar ? "OK" : "未找到 — IMU 初始化将跳过！");
+
             SendCustomCommands(player.joycon.writeChar);
-            SendJoyCon2OfficialInit(player.joycon.rumbleChar);  // 启用 IMU 上报：必须走 rumbleChar，writeChar 无法唤醒 IMU
+
+            if (player.joycon.rumbleChar) {
+                LOG_INFO("IMU", "正在发送 JoyCon2 官方初始化序列（17条命令 → rumbleChar）...");
+                SendJoyCon2OfficialInit(player.joycon.rumbleChar);
+                LOG_INFO("IMU", "初始化序列发送完毕，等待控制器响应 IMU 上报...");
+            } else {
+                LOG_WARN("IMU", "rumbleChar 特征值未找到，IMU 初始化命令未发送 — 体感将不可用！");
+                LOG_WARN("IMU", "请检查 UUID: ce49a830(Left) / 65a724b3(Right) 是否被 GATT 扫描到");
+            }
+
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(player.joycon.writeChar, static_cast<uint8_t>(1 << (GetPlayerCount() - 1)));
             EmitSound(player.joycon.writeChar);
@@ -881,8 +900,16 @@ public:
         pendingDualRight = rightJoyCon;
         pendingDualGyro = gyroSource;
         if (rightJoyCon.writeChar) {
+            LOG_INFO("BLE", "双 JoyCon 右侧已连接，BLE 地址: %llX，rumbleChar: %s",
+                rightJoyCon.bleAddress, rightJoyCon.rumbleChar ? "OK" : "未找到！");
             SendCustomCommands(rightJoyCon.writeChar);
-            SendJoyCon2OfficialInit(rightJoyCon.rumbleChar);  // 启用 IMU 上报：必须走 rumbleChar
+            if (rightJoyCon.rumbleChar) {
+                LOG_INFO("IMU", "发送右 JoyCon 初始化序列 → rumbleChar...");
+                SendJoyCon2OfficialInit(rightJoyCon.rumbleChar);
+                LOG_INFO("IMU", "右 JoyCon 初始化序列发送完毕");
+            } else {
+                LOG_WARN("IMU", "右 JoyCon rumbleChar 未找到，体感初始化跳过");
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(rightJoyCon.writeChar, 0x01);
             EmitSound(rightJoyCon.writeChar);
@@ -892,8 +919,16 @@ public:
 
     bool AddDualJoyConSecondStep(ConnectedJoyCon leftJoyCon) {
         if (leftJoyCon.writeChar) {
+            LOG_INFO("BLE", "双 JoyCon 左侧已连接，BLE 地址: %llX，rumbleChar: %s",
+                leftJoyCon.bleAddress, leftJoyCon.rumbleChar ? "OK" : "未找到！");
             SendCustomCommands(leftJoyCon.writeChar);
-            SendJoyCon2OfficialInit(leftJoyCon.rumbleChar);  // 启用 IMU 上报：必须走 rumbleChar
+            if (leftJoyCon.rumbleChar) {
+                LOG_INFO("IMU", "发送左 JoyCon 初始化序列 → rumbleChar...");
+                SendJoyCon2OfficialInit(leftJoyCon.rumbleChar);
+                LOG_INFO("IMU", "左 JoyCon 初始化序列发送完毕");
+            } else {
+                LOG_WARN("IMU", "左 JoyCon rumbleChar 未找到，体感初始化跳过");
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(leftJoyCon.writeChar, 0x08);
             EmitSound(leftJoyCon.writeChar);
@@ -1072,11 +1107,21 @@ public:
             GattClientCharacteristicConfigurationDescriptorValue::Notify).get();
 
         if (controller.writeChar) {
+            LOG_INFO("BLE", "%s 已连接，BLE 地址: %llX，rumbleChar: %s",
+                (type == ControllerType::ProController) ? "Pro Controller" : "NSO GC",
+                controller.bleAddress, controller.rumbleChar ? "OK" : "未找到！");
             SendCustomCommands(controller.writeChar);
-            if (type == ControllerType::ProController)
-                SendProCon2OfficialInit(controller.rumbleChar);   // 启用 IMU 上报：必须走 rumbleChar
-            else
-                SendNSOGCOfficialInit(controller.rumbleChar);     // 启用 IMU 上报：必须走 rumbleChar
+            if (controller.rumbleChar) {
+                LOG_INFO("IMU", "发送 %s 初始化序列 → rumbleChar...",
+                    (type == ControllerType::ProController) ? "Pro Controller" : "NSO GC");
+                if (type == ControllerType::ProController)
+                    SendProCon2OfficialInit(controller.rumbleChar);
+                else
+                    SendNSOGCOfficialInit(controller.rumbleChar);
+                LOG_INFO("IMU", "初始化序列发送完毕");
+            } else {
+                LOG_WARN("IMU", "rumbleChar 未找到，体感初始化跳过");
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             SetPlayerLEDs(controller.writeChar, static_cast<uint8_t>(1 << (GetPlayerCount())));
             EmitSound(controller.writeChar);
