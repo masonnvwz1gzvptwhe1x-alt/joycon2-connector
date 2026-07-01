@@ -19,6 +19,7 @@
 
 #include "UI_Theme.h"
 #include "UI_Pages.h"
+#include "Logger.h"
 #include "ConfigManager.h"
 #include "ViGEmManager.h"
 #include "PlayerManager.h"
@@ -210,6 +211,7 @@ static NavItem g_navItems[] = {
     { "nav_settings" },
 };
 static const int NAV_COUNT = 5;
+static bool g_showLogWindow = false;   // 日志弹窗开关
 
 // Windows system font candidates
 static const char* FONT_CJK_CANDIDATES[] = { "msyh.ttc", "msyhbd.ttc", "simsun.ttc", "malgun.ttf" };
@@ -529,10 +531,21 @@ void RenderSidebar() {
         ImGui::PopID();
     }
 
-    // Bottom: Version display
+    // Bottom: Version display + Log button
     float bottomY = ImGui::GetWindowHeight() - S(40);
     ImGui::SetCursorPos(ImVec2(S(20), bottomY));
     ImGui::TextColored(UITheme::TextTertiary, "v%s", APP_VERSION);
+    ImGui::SameLine(0, S(12));
+    ImGui::PushStyleColor(ImGuiCol_Button,        UITheme::ButtonSecondary);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  UITheme::ButtonSecondaryHov);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,   UITheme::SurfaceDim);
+    ImGui::PushStyleColor(ImGuiCol_Text,           UITheme::TextSecondary);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(8), S(3)));
+    if (ImGui::SmallButton("日志")) {
+        g_showLogWindow = !g_showLogWindow;
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(4);
 
     ImGui::EndChild();
     ImGui::PopStyleVar();
@@ -862,6 +875,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
         ImGui::EndChild();
 
         ImGui::End();
+
+        // 日志弹窗（独立于主窗口，浮在最上层）
+        if (g_showLogWindow) {
+            Logger::Instance().RenderWindow(&g_showLogWindow);
+        }
 
         // Render
         ImGui::Render();
